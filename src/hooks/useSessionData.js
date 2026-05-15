@@ -10,6 +10,10 @@ export function useSessionData() {
   }
 
   async function saveSession({ operation, startedAt, endedAt, results, xpEarned }) {
+    const correctCount = results.filter(r => r.correct).length
+    const accuracy = results.length > 0 ? correctCount / results.length : 0
+    const coinsEarned = correctCount + (accuracy >= 0.8 ? 3 : 0)
+
     const { data: session, error } = await supabase
       .from('sessions')
       .insert({
@@ -18,7 +22,7 @@ export function useSessionData() {
         started_at: startedAt,
         ended_at: endedAt,
         questions_answered: results.length,
-        correct: results.filter(r => r.correct).length,
+        correct: correctCount,
         xp_earned: xpEarned,
       })
       .select()
@@ -39,15 +43,15 @@ export function useSessionData() {
 
     await supabase.from('question_results').insert(rows)
 
-    // Pass local calendar date so streak logic isn't skewed by UTC offset
-    const localDate = new Date().toLocaleDateString('en-CA') // YYYY-MM-DD in local time
+    const localDate = new Date().toLocaleDateString('en-CA')
     await supabase.rpc('update_kid_after_session', {
       p_user_id: user.id,
       p_xp_earned: xpEarned,
+      p_coins_earned: coinsEarned,
       p_session_date: localDate,
     })
 
-    return session.id
+    return { sessionId: session.id, coinsEarned }
   }
 
   return { fetchWeakFacts, saveSession }

@@ -160,14 +160,16 @@ export default function GamePlay() {
   useEffect(() => {
     if (state.phase !== 'done') return
     async function finish() {
+      let coinsEarned = 0
       try {
-        await saveSession({
+        const saved = await saveSession({
           operation,
           startedAt: new Date(state.startedAt).toISOString(),
           endedAt: new Date().toISOString(),
           results: state.results,
           xpEarned: state.sessionXP,
         })
+        coinsEarned = saved.coinsEarned
       } catch (e) {
         console.error('Failed to save session', e)
       }
@@ -175,6 +177,7 @@ export default function GamePlay() {
         state: {
           operation,
           results: state.results,
+          coinsEarned,
           sessionXP: state.sessionXP,
         },
       })

@@ -6,6 +6,7 @@ import { getLevelInfo } from '../utils/xp'
 import { difficultyLabel } from '../utils/questions'
 import XPBar from '../components/XPBar'
 import DeckDisplay from '../components/DeckDisplay'
+import CharacterDisplay from '../components/CharacterDisplay'
 
 const OPERATIONS = [
   { id: 'multiply', symbol: '×', label: 'Multiply' },
@@ -25,21 +26,34 @@ export default function GameHome() {
   if (loading) return <div className="flex items-center justify-center h-screen bg-[#0d0d0d] text-[#FF5F1F]">Loading…</div>
 
   const xp = profile?.total_xp ?? 0
+  const coins = profile?.coins ?? 0
   const { current, next } = getLevelInfo(xp)
   const level = current.level
   const streak = profile?.current_streak_days ?? 0
-  const activeDeck = profile?.unlocked_decks?.at(-1) ?? 'default'
+
+  const equippedBoard     = profile?.equipped_board     ?? 'default'
+  const equippedWheels    = profile?.equipped_wheels    ?? 'classic'
+  const equippedTrucks    = profile?.equipped_trucks    ?? 'steel'
+  const equippedCharacter = profile?.equipped_character ?? 'default'
 
   function startSession() {
     navigate('/game/play', { state: { operation: selected, level } })
   }
 
   return (
-    <div className="min-h-screen bg-[#0d0d0d] flex flex-col px-4 pt-8 pb-6 max-w-md mx-auto">
+    <div className="min-h-screen bg-[#0d0d0d] flex flex-col px-4 pt-6 pb-6 max-w-md mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <h1 className="font-['Barlow_Condensed'] text-4xl font-black text-[#FF5F1F] uppercase tracking-tight">MathSesh</h1>
-        <button onClick={signOut} className="text-[#555] font-['Space_Mono'] text-xs hover:text-white">OUT</button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate('/shop')}
+            className="bg-[#1a1a1a] px-3 py-1.5 font-['Barlow_Condensed'] font-black text-sm text-[#FFE600] uppercase hover:bg-[#242424] transition-colors"
+          >
+            🪙 {coins} SHOP
+          </button>
+          <button onClick={signOut} className="text-[#555] font-['Space_Mono'] text-xs hover:text-white">OUT</button>
+        </div>
       </div>
 
       {/* Level / XP */}
@@ -57,9 +71,15 @@ export default function GameHome() {
         </div>
       </div>
 
-      {/* Deck */}
-      <div className="flex justify-center mb-6">
-        <DeckDisplay deckId={activeDeck} size="md" />
+      {/* Rig + Character */}
+      <div className="flex items-end justify-center gap-6 mb-6">
+        <CharacterDisplay characterId={equippedCharacter} width={72} height={108} />
+        <DeckDisplay
+          deckId={equippedBoard}
+          wheelsId={equippedWheels}
+          trucksId={equippedTrucks}
+          size="md"
+        />
       </div>
 
       {/* Operation selector */}
@@ -79,7 +99,6 @@ export default function GameHome() {
         ))}
       </div>
 
-      {/* Difficulty label for multiply/divide */}
       <div className="h-6 mb-4 flex items-center justify-center">
         {MULTIPLY_DIVIDE.has(selected) && (
           <span className="font-['Space_Mono'] text-xs text-[#555]">

@@ -11,7 +11,7 @@ export function useKidProfile() {
     if (!user) return
     const { data } = await supabase
       .from('kid_profile')
-      .select('*')
+      .select('user_id, total_xp, current_level, current_streak_days, last_session_date, coins, equipped_board, equipped_wheels, equipped_trucks, equipped_character')
       .eq('user_id', user.id)
       .single()
     setProfile(data)

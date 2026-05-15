@@ -5,6 +5,7 @@ import GameHome from './pages/GameHome'
 import GamePlay from './pages/GamePlay'
 import GameResults from './pages/GameResults'
 import ParentDashboard from './pages/ParentDashboard'
+import Shop from './pages/Shop'
 
 const Spinner = () => (
   <div className="flex items-center justify-center h-screen bg-[#0d0d0d] text-[#FF5F1F] font-['Barlow_Condensed'] text-2xl tracking-widest">
@@ -39,6 +40,7 @@ export default function App() {
           <Route path="/game/play" element={<RoleGuard role="kid"><GamePlay /></RoleGuard>} />
           <Route path="/game/results" element={<RoleGuard role="kid"><GameResults /></RoleGuard>} />
           <Route path="/dashboard" element={<RoleGuard role="parent"><ParentDashboard /></RoleGuard>} />
+          <Route path="/shop" element={<RoleGuard role="kid"><Shop /></RoleGuard>} />
         </Routes>
       </AuthProvider>
     </BrowserRouter>

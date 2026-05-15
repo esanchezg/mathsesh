@@ -115,8 +115,9 @@ export default function ParentDashboard() {
       <div className="bg-[#1a1a1a] p-5 mb-5">
         <div className="font-['Barlow_Condensed'] font-black text-3xl text-white uppercase">{current.title}</div>
         <div className="font-['Space_Mono'] text-[#FF5F1F] text-sm mt-1">Level {current.level}</div>
-        <div className="grid grid-cols-3 gap-3 mt-4">
+        <div className="grid grid-cols-4 gap-3 mt-4">
           <Stat label="Total XP" value={kidProfile?.total_xp ?? 0} />
+          <Stat label="Coins" value={`🪙${kidProfile?.coins ?? 0}`} />
           <Stat label="Day Streak" value={`${kidProfile?.current_streak_days ?? 0}🔥`} />
           <Stat label="Sessions" value={sessions.length} />
         </div>
