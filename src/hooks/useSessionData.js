@@ -39,9 +39,12 @@ export function useSessionData() {
 
     await supabase.from('question_results').insert(rows)
 
+    // Pass local calendar date so streak logic isn't skewed by UTC offset
+    const localDate = new Date().toLocaleDateString('en-CA') // YYYY-MM-DD in local time
     await supabase.rpc('update_kid_after_session', {
       p_user_id: user.id,
       p_xp_earned: xpEarned,
+      p_session_date: localDate,
     })
 
     return session.id
