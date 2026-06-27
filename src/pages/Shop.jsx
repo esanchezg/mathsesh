@@ -61,7 +61,15 @@ export default function Shop() {
       setFeedback({ type: 'success', msg: `${item.name} purchased!` })
       await refresh()
     } else if (result?.error === 'insufficient_coins') {
-      setFeedback({ type: 'error', msg: `Need ${item.price - coins} more coins` })
+      setFeedback({ type: 'error', msg: 'Not enough coins' })
+      await refresh()
+    } else if (result?.error === 'already_owned') {
+      setFeedback({ type: 'error', msg: 'You already own this!' })
+      await refresh()
+    } else {
+      setFeedback({ type: 'error', msg: result?.detail ?? `Purchase failed — try again` })
+      console.error('purchase failed:', result)
+      await refresh()
     }
     setPurchasing(null)
     setTimeout(() => setFeedback(null), 2000)
@@ -116,7 +124,8 @@ export default function Shop() {
       <div className="flex-1 overflow-y-auto px-4 pb-6">
         <div className="grid grid-cols-2 gap-3">
           {items.map(item => {
-            const owned = isOwned(item.id)
+            const itemWithCategory = { ...item, category: activeTab }
+            const owned = isOwned(item.id, activeTab)
             const isEquipped = equipped[activeTab] === item.id
             const canAfford = coins >= item.price
 
@@ -152,7 +161,7 @@ export default function Shop() {
                   </div>
                 ) : owned ? (
                   <button
-                    onClick={() => handleEquip(item)}
+                    onClick={() => handleEquip(itemWithCategory)}
                     disabled={equipping === item.id}
                     className="w-full py-2 bg-[#242424] text-white font-['Barlow_Condensed'] font-black text-sm uppercase hover:bg-[#333] transition-colors"
                   >
@@ -160,7 +169,7 @@ export default function Shop() {
                   </button>
                 ) : (
                   <button
-                    onClick={() => handlePurchase(item)}
+                    onClick={() => handlePurchase(itemWithCategory)}
                     disabled={!canAfford || purchasing === item.id}
                     className={`w-full py-2 font-['Barlow_Condensed'] font-black text-sm uppercase transition-colors ${
                       canAfford
