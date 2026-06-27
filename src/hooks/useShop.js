@@ -23,35 +23,16 @@ export function useShop() {
   }
 
   async function purchase(item) {
-    const { data: profile, error: profileError } = await supabase
-      .from('kid_profile')
-      .select('coins')
-      .eq('user_id', user.id)
-      .single()
-    if (profileError) return { success: false, error: 'rpc_error', detail: profileError.message }
-
-    if (profile.coins < item.price)
-      return { success: false, error: 'insufficient_coins' }
-
-    const { error: updateError } = await supabase
-      .from('kid_profile')
-      .update({ coins: profile.coins - item.price })
-      .eq('user_id', user.id)
-    if (updateError) return { success: false, error: 'rpc_error', detail: updateError.message }
-
-    const { error: insertError } = await supabase
-      .from('owned_items')
-      .insert({ user_id: user.id, item_id: item.id, category: item.category })
-    if (insertError) {
-      await supabase.from('kid_profile').update({ coins: profile.coins }).eq('user_id', user.id)
-      if (insertError.code === '23505') {
-        return { success: false, error: 'already_owned' }
-      }
-      return { success: false, error: 'rpc_error', detail: insertError.message }
-    }
-
+    const { data, error } = await supabase.rpc('purchase_item_atomic', {
+      p_user_id: user.id,
+      p_item_id: item.id,
+      p_category: item.category,
+      p_price: item.price,
+    })
+    if (error) return { success: false, error: 'rpc_error', detail: error.message }
+    if (!data?.success) return { success: false, error: data?.error ?? 'rpc_error' }
     setOwned(prev => [...(prev ?? []), { item_id: item.id, category: item.category }])
-    return { success: true, coins_remaining: profile.coins - item.price }
+    return { success: true, coins_remaining: data.coins_remaining }
   }
 
   async function equip(item) {
