@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { useKidProfile } from '../hooks/useKidProfile'
 import { getLevelInfo } from '../utils/xp'
 import { difficultyLabel } from '../utils/questions'
+import { randomEncouragement } from '../utils/encouragements'
 import XPBar from '../components/XPBar'
 import DeckDisplay from '../components/DeckDisplay'
 import CharacterDisplay from '../components/CharacterDisplay'
@@ -22,6 +23,12 @@ export default function GameHome() {
   const { profile, loading } = useKidProfile()
   const navigate = useNavigate()
   const [selected, setSelected] = useState('multiply')
+  const [encouragement, setEncouragement] = useState(() => randomEncouragement())
+
+  function selectOperation(id) {
+    setSelected(id)
+    setEncouragement(randomEncouragement())
+  }
 
   if (loading) return <div className="flex items-center justify-center h-screen bg-[#0d0d0d] text-[#FF5F1F]">Loading…</div>
 
@@ -87,7 +94,7 @@ export default function GameHome() {
         {OPERATIONS.map(op => (
           <button
             key={op.id}
-            onClick={() => setSelected(op.id)}
+            onClick={() => selectOperation(op.id)}
             className={`py-5 font-['Barlow_Condensed'] font-black text-4xl transition-colors ${
               selected === op.id
                 ? 'bg-[#FF5F1F] text-black'
@@ -99,7 +106,10 @@ export default function GameHome() {
         ))}
       </div>
 
-      <div className="h-6 mb-4 flex items-center justify-center">
+      <div className="mb-4 flex flex-col items-center gap-1">
+        <span className="font-['Barlow_Condensed'] font-black text-lg text-[#888] uppercase tracking-wide text-center">
+          {encouragement}
+        </span>
         {MULTIPLY_DIVIDE.has(selected) && (
           <span className="font-['Space_Mono'] text-xs text-[#555]">
             difficulty: {difficultyLabel(level)}
