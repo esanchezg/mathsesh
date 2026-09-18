@@ -10,3 +10,4 @@ dist
 # is public; never commit this directory. Schema-only findings from it are
 # folded into db/migrations/ instead.
 db/dump/
+.env*.local

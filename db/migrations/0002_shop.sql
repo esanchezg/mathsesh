@@ -35,7 +35,7 @@ alter table public.kid_profile
 -- ============================================================================
 
 create table if not exists public.owned_items (
-  user_id text references public.profiles on delete cascade,
+  user_id uuid references public.profiles on delete cascade,
   item_id text not null,
   category text not null,
   purchased_at timestamptz default now(),
@@ -45,7 +45,7 @@ create table if not exists public.owned_items (
 alter table public.owned_items enable row level security;
 
 create policy "kid rw owned" on public.owned_items for all
-  using (auth.user_id() = user_id);
+  using (auth.user_id()::uuid = user_id);
 create policy "parent reads owned" on public.owned_items for select
   using (public.current_user_role() = 'parent');
 
@@ -67,8 +67,9 @@ on conflict do nothing;
 -- purchase_item_atomic — src/hooks/useShop.js:26
 --
 -- Recovered verbatim from the live dump (db/dump/schema.sql, see
--- db/migrations/README.md) and translated for Neon: uuid -> text,
--- auth.uid() -> auth.user_id(). Behavior preserved exactly, including one
+-- db/migrations/README.md) and translated for Neon:
+-- auth.uid() -> auth.user_id()::uuid (uuid kept as-is — see the type note at
+-- the top of 0001_core_schema.sql). Behavior preserved exactly, including one
 -- gap worth knowing about: there is no "already owned" check — buying an
 -- item you already own still deducts coins (the owned_items insert then
 -- no-ops via ON CONFLICT), so nothing breaks but coins can be lost with no
@@ -85,28 +86,32 @@ on conflict do nothing;
 -- both read the same starting balance — the exact race the original
 -- non-atomic purchase_item() (commit bcb2886) was replaced to close.
 --
--- Found by testing against a throwaway local Postgres before this ever
--- touched Neon: because this function is SECURITY INVOKER, it calls
--- auth.user_id() as the "authenticated" role, not as the function owner —
--- unlike every other function here, which is SECURITY DEFINER and so
--- already has full access. Whether Neon pre-grants this by default wasn't
--- confirmed against a live project, so it's granted explicitly here too;
--- redundant is fine, missing is a broken purchase flow.
+-- CORRECTED against the real Neon project (not just local testing): the
+-- live version is SECURITY INVOKER, so it calls auth.user_id() as the
+-- "authenticated" role rather than as the function owner. Against a local
+-- stub Postgres, granting authenticated USAGE on schema auth fixed this —
+-- but on real Neon, the auth schema is platform-owned, and the connecting
+-- role has no privilege to grant on it (confirmed live: the GRANT silently
+-- no-ops with "WARNING: no privileges were granted for auth", not an
+-- error). So this function is SECURITY DEFINER here, unlike its live
+-- Supabase-derived counterpart and every other function's comment claiming
+-- otherwise — it changes nothing about *authorization*, since the
+-- function's own auth.user_id() = p_user_id check already gates access
+-- regardless of whose privileges execute the body; it only changes whose
+-- privileges are used to see the auth schema at all. Verified end-to-end
+-- against the real Data API with a real signed-in user after this fix.
 -- ============================================================================
 
-grant usage on schema auth to authenticated, anonymous;
-grant execute on function auth.user_id() to authenticated, anonymous;
-
 create or replace function public.purchase_item_atomic(
-  p_user_id text,
+  p_user_id uuid,
   p_item_id text,
   p_category text,
   p_price int
-) returns json language plpgsql as $$
+) returns json language plpgsql security definer as $$
 declare
   v_coins int;
 begin
-  if auth.user_id() is distinct from p_user_id then
+  if auth.user_id()::uuid is distinct from p_user_id then
     return json_build_object('success', false, 'error', 'unauthorized');
   end if;
 
@@ -140,7 +145,7 @@ create or replace function public.equip_item(
 begin
   if not exists (
     select 1 from public.owned_items
-    where user_id = auth.user_id() and category = p_category and item_id = p_item_id
+    where user_id = auth.user_id()::uuid and category = p_category and item_id = p_item_id
   ) then
     raise exception 'Item not owned';
   end if;
@@ -150,7 +155,7 @@ begin
     equipped_wheels    = case when p_category = 'wheels'    then p_item_id else equipped_wheels    end,
     equipped_trucks    = case when p_category = 'trucks'    then p_item_id else equipped_trucks    end,
     equipped_character = case when p_category = 'character' then p_item_id else equipped_character end
-  where user_id = auth.user_id();
+  where user_id = auth.user_id()::uuid;
 end;
 $$;
 
@@ -174,7 +179,7 @@ $$;
 -- ============================================================================
 
 create or replace function public.update_kid_after_session(
-  p_user_id text,
+  p_user_id uuid,
   p_xp_earned int,
   p_coins_earned int default 0,
   p_session_date date default current_date
@@ -183,7 +188,7 @@ declare
   v_total_xp int;
   v_new_level int;
 begin
-  if auth.user_id() is distinct from p_user_id then
+  if auth.user_id()::uuid is distinct from p_user_id then
     raise exception 'unauthorized';
   end if;
 
@@ -228,7 +233,7 @@ $$;
 -- caller is the parent dashboard, so this changes nothing for it.
 -- ============================================================================
 
-create or replace function public.reset_kid_progress(p_user_id text)
+create or replace function public.reset_kid_progress(p_user_id uuid)
 returns void language plpgsql security definer as $$
 begin
   if public.current_user_role() <> 'parent' then
@@ -263,7 +268,7 @@ $$;
 -- Grants
 -- ============================================================================
 
-grant execute on function public.purchase_item_atomic(text, text, text, int) to authenticated;
+grant execute on function public.purchase_item_atomic(uuid, text, text, int) to authenticated;
 grant execute on function public.equip_item(text, text) to authenticated;
-grant execute on function public.update_kid_after_session(text, int, int, date) to authenticated;
-grant execute on function public.reset_kid_progress(text) to authenticated;
+grant execute on function public.update_kid_after_session(uuid, int, int, date) to authenticated;
+grant execute on function public.reset_kid_progress(uuid) to authenticated;

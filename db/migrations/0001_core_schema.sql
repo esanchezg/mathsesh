@@ -2,10 +2,15 @@
 --
 -- Ported from the original supabase-schema.sql (Supabase Postgres) with the
 -- following changes for Neon:
---   - auth.uid() -> auth.user_id()  (Neon Auth's JWT-claim function; returns text)
---   - user_id / profiles.id: uuid -> text, no longer FK'd to auth.users (Neon
---     Auth's user table is neon_auth.users_sync — confirm exact name against
---     the live Neon project before applying; see README in this directory)
+--   - auth.uid() -> auth.user_id()::uuid. Neon's auth.user_id() extracts the
+--     JWT `sub` claim and returns text (JWT claims are always strings), but
+--     neon_auth."user".id — and therefore every user_id/profiles.id column
+--     here, to keep a real FK — is uuid, confirmed against the live Neon
+--     project. Every comparison against auth.user_id() casts it to match.
+--   - profiles.id FK's neon_auth."user" instead of auth.users (also
+--     confirmed live: the table is neon_auth."user", quoted because "user"
+--     is a reserved word — not neon_auth.users_sync, which some Neon docs
+--     describe for a different setup).
 --   - Dropped the handle_new_user() trigger on auth.users: Neon Auth has no
 --     equivalent hook. With four fixed family accounts, profiles/kid_profile
 --     rows are seeded explicitly instead (db/seed/seed_accounts.sql, Phase 2).
@@ -19,19 +24,23 @@
 --     empty — see src/pages/ParentDashboard.jsx:52).
 --   - Explicit GRANTs added throughout; Supabase gives these away by default,
 --     Neon's Data API does not.
+--
+-- No client change needed for the uuid choice: user.id from Neon Auth (via
+-- SupabaseAuthAdapter) is already a uuid string — the app always passed it
+-- as such, matching the original Supabase schema's uuid columns.
 
 -- ============================================================================
 -- Tables
 -- ============================================================================
 
 create table if not exists public.profiles (
-  id text primary key,
+  id uuid primary key references neon_auth."user" on delete cascade,
   role text not null check (role in ('kid', 'parent')),
   username text
 );
 
 create table if not exists public.kid_profile (
-  user_id text primary key references public.profiles on delete cascade,
+  user_id uuid primary key references public.profiles on delete cascade,
   total_xp int not null default 0,
   current_level int not null default 1,
   current_streak_days int not null default 0,
@@ -41,7 +50,7 @@ create table if not exists public.kid_profile (
 
 create table if not exists public.sessions (
   id uuid default gen_random_uuid() primary key,
-  user_id text references public.profiles on delete cascade not null,
+  user_id uuid references public.profiles on delete cascade not null,
   operation text not null,
   started_at timestamptz not null,
   ended_at timestamptz,
@@ -53,7 +62,7 @@ create table if not exists public.sessions (
 create table if not exists public.question_results (
   id uuid default gen_random_uuid() primary key,
   session_id uuid references public.sessions on delete cascade not null,
-  user_id text references public.profiles on delete cascade not null,
+  user_id uuid references public.profiles on delete cascade not null,
   operation text not null,
   operand_a int not null,
   operand_b int not null,
@@ -76,7 +85,7 @@ security definer
 stable
 set search_path = public
 as $$
-  select role from public.profiles where id = auth.user_id()
+  select role from public.profiles where id = auth.user_id()::uuid
 $$;
 
 -- ============================================================================
@@ -89,24 +98,24 @@ alter table public.sessions enable row level security;
 alter table public.question_results enable row level security;
 
 create policy "own profile" on public.profiles for select
-  using (auth.user_id() = id);
+  using (auth.user_id()::uuid = id);
 create policy "parent reads profiles" on public.profiles for select
   using (public.current_user_role() = 'parent');
 
 create policy "kid reads own" on public.kid_profile for select
-  using (auth.user_id() = user_id);
+  using (auth.user_id()::uuid = user_id);
 create policy "kid writes own" on public.kid_profile for all
-  using (auth.user_id() = user_id);
+  using (auth.user_id()::uuid = user_id);
 create policy "parent reads kid_profile" on public.kid_profile for select
   using (public.current_user_role() = 'parent');
 
 create policy "kid session rw" on public.sessions for all
-  using (auth.user_id() = user_id);
+  using (auth.user_id()::uuid = user_id);
 create policy "parent reads sessions" on public.sessions for select
   using (public.current_user_role() = 'parent');
 
 create policy "kid qr rw" on public.question_results for all
-  using (auth.user_id() = user_id);
+  using (auth.user_id()::uuid = user_id);
 create policy "parent reads qr" on public.question_results for select
   using (public.current_user_role() = 'parent');
 
@@ -121,7 +130,7 @@ create policy "parent reads qr" on public.question_results for select
 -- sibling's weak-facts data by passing a different p_user_id. Added a plain
 -- ownership check; the app always passes its own user's id, so this changes
 -- nothing for legitimate calls.
-create or replace function public.get_weak_facts(p_user_id text, p_operation text)
+create or replace function public.get_weak_facts(p_user_id uuid, p_operation text)
 returns table (
   operand_a int,
   operand_b int,
@@ -144,7 +153,7 @@ returns table (
     end as answer
   from public.question_results
   where user_id = p_user_id
-    and user_id = auth.user_id()   -- ownership guard, see comment above
+    and user_id = auth.user_id()::uuid   -- ownership guard, see comment above
     and operation = p_operation
   group by operand_a, operand_b, operation
   having
@@ -173,7 +182,7 @@ $$;
 
 create or replace function public.get_all_weak_facts()
 returns table (
-  user_id text,
+  user_id uuid,
   operand_a int,
   operand_b int,
   operation text,
@@ -212,5 +221,5 @@ alter default privileges in schema public
   grant select, insert, update, delete on tables to authenticated;
 
 grant execute on function public.current_user_role() to authenticated;
-grant execute on function public.get_weak_facts(text, text) to authenticated;
+grant execute on function public.get_weak_facts(uuid, text) to authenticated;
 grant execute on function public.get_all_weak_facts() to authenticated;

@@ -62,6 +62,48 @@ matters): `purchase_item_atomic` has no `already_owned` check, so buying an
 already-owned item silently deducts coins for no effect (the `owned_items`
 insert then no-ops via `ON CONFLICT DO NOTHING`).
 
+## Phase 2 findings (applying this against the real Neon project, 2026-09-18)
+
+Things discovered only by actually running this against the live project —
+kept here since they're easy to lose track of otherwise:
+
+- **`neon_auth."user".id` is `uuid`, not `text`.** `auth.user_id()` returns
+  text (it's a raw JWT claim), but the FK target column is uuid, so every
+  `user_id`/`profiles.id` column here is `uuid` and every comparison casts
+  with `auth.user_id()::uuid`. This actually made things *more* faithful to
+  the original Supabase schema, not less — `user.id` from the client was
+  always a uuid string.
+- **`purchase_item_atomic` had to become `SECURITY DEFINER`**, unlike its
+  live Supabase-derived counterpart. On Neon the `auth` schema is
+  platform-owned; the connecting role can't grant `authenticated` access to
+  it (confirmed: the attempted `GRANT` silently no-ops with `WARNING: no
+  privileges were granted for auth`, not an error), so a `SECURITY INVOKER`
+  function calling `auth.user_id()` fails with `permission denied for
+  schema auth` the moment anyone but the owner calls it. Every other
+  function was already `SECURITY DEFINER` and unaffected.
+- **The Data API's RLS machinery (`auth` schema, `authenticated`/
+  `anonymous` roles) is not created just by installing the Vercel
+  integration with `-m auth=true`.** It requires a separate step —
+  Neon Console → your database → **Data API** → Enable, with **"Use Neon
+  Auth"** checked (**"Grant public schema access"** left unchecked; this
+  migration's own explicit grants cover what's needed). Confirmed via
+  Neon's own example migration
+  ([neon-data-api-neon-auth](https://github.com/neondatabase/neon-data-api-neon-auth))
+  that developers are never meant to create `auth.user_id()` or the roles
+  themselves — their absence really does mean Data API isn't enabled yet,
+  not that a migration is missing something.
+- **Trusted origins are not automatic.** New Neon Auth projects trust
+  `localhost` only (`allow_localhost` in `neon_auth.project_config`).
+  Production sign-in from `https://mathsesh.xyz` returned `403
+  INVALID_ORIGIN` until `trusted_origins` was updated directly:
+  ```sql
+  update neon_auth.project_config set trusted_origins = '["https://mathsesh.xyz"]'::jsonb;
+  ```
+  Preview deployments (`https://mathsesh-*.vercel.app`) are **not** in that
+  list and won't be able to sign in until added — there's no wildcard
+  support confirmed, so each one needed would have to be appended
+  individually, or this could be revisited if Preview auth becomes worth it.
+
 ## Neon-specific translation notes
 
 - `auth.uid()` (Supabase, returns uuid) → `auth.user_id()` (Neon Auth, returns
