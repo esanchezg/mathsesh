@@ -4,3 +4,9 @@ dist
 .env.local
 .vercel
 .claude/
+
+# Recovery dump from the live Supabase DB (db/dump/run_dump.sh) — contains
+# real family data and auth_users.sql has bcrypt password hashes. This repo
+# is public; never commit this directory. Schema-only findings from it are
+# folded into db/migrations/ instead.
+db/dump/

@@ -17,13 +17,10 @@ export function AuthProvider({ children }) {
 
     setUser(session.user)
 
-    // Prefer app_metadata claim (no DB round-trip), fall back to profiles table
-    const jwtRole = session.user.app_metadata?.role ?? null
-    if (jwtRole) {
-      setRole(jwtRole)
-      return
-    }
-
+    // Neon Auth's JWT `role` claim is reserved for Postgres role switching
+    // (authenticated/anonymous/custom Postgres roles via the Data API) and
+    // can't carry app-level values like 'parent'/'kid' the way Supabase's
+    // app_metadata.role did — always resolve role from the profiles table.
     const { data } = await supabase
       .from('profiles')
       .select('role')
